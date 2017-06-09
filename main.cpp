@@ -19,7 +19,7 @@
 // framerate regulator snippet in main() is from:  http://lazyfoo.net/SDL_tutorials/lesson14/
 const int framerate = 60;
 
-const int xres = 1024;  // window x res
+const int xres = 820;   // window x res
 const int yres = 768;   // window y res
 const int cxres = 256;  // canvas x res
 const int cyres = 240;  // canvas y res
@@ -68,14 +68,14 @@ int main ( int argc, char** argv )
 
     // create a new window
     SDL_Surface* screen = SDL_SetVideoMode(xres, yres, bitsPerPixel,
-                                           SDL_SWSURFACE
-                                           // | SDL_FULLSCREEN
+                                           SDL_HWSURFACE
+                                           /*  | SDL_FULLSCREEN  */
                                            | SDL_DOUBLEBUF
 	);
 
     const SDL_PixelFormat& fmt = *(screen->format);
-    SDL_Surface* canvas = SDL_CreateRGBSurface(SDL_SWSURFACE, cxres, cyres, bitsPerPixel,
-					       fmt.Rmask, fmt.Gmask, fmt.Bmask, fmt.Amask);
+    SDL_Surface* canvas = SDL_CreateRGBSurface(SDL_HWSURFACE, cxres, cyres, bitsPerPixel,
+					       fmt.Bmask, fmt.Gmask, fmt.Rmask, fmt.Amask);
 
     if ( !screen )
     {
@@ -116,7 +116,9 @@ int main ( int argc, char** argv )
 	
 	{
 	    // call NASM-compiled fun stuffs
+	    SDL_LockSurface(canvas);
 	    asmRenderTo(canvas->pixels, canvas->w, canvas->h);
+	    SDL_UnlockSurface(canvas);
 
 	    // scale virtual canvas to window's actual surface
 	    blitScaled(canvas, screen);
