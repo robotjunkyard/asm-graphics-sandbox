@@ -30,8 +30,8 @@ asmRenderTo:
 	call FillCanvas
 
 	mov rsi,meow		; ptr to 64x64x32bit cat graphic
-	mov rax,0
-	mov rbx,0
+	mov rax,16
+	mov rbx,8
 	call DrawSprite
 	ret
 
@@ -57,6 +57,15 @@ _fillLoop:
 DrawSprite:
 	push rsi
 	push rdi
+	
+	; start memory for rdi = rdi + (4 * (y*Cols + x))
+	mov r15,rbx		; r15 = y
+	imul r15,r8		; r15 *= Cols
+	add r15,rax		; r15 += x
+	imul r15,4		; r15 *= 4
+
+	add rdi,r15		; rdi += offset according to r15
+
 	mov rdx,0		; row
 _blitRows:
 	cld
