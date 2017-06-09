@@ -14,6 +14,7 @@
 
 #define UBYTE   unsigned char
 #define U16     unsigned short
+#define U32     unsigned int
 
 // framerate regulator snippet in main() is from:  http://lazyfoo.net/SDL_tutorials/lesson14/
 const int framerate = 60;
@@ -24,7 +25,7 @@ const int cxres = 256;  // canvas x res
 const int cyres = 240;  // canvas y res
 
 extern "C" {
-    void asmRenderTo(void* canvasPtr, int canvasWidth, int canvasHeight, int canvasBytesPerPixel);
+    void asmRenderTo(void* canvasPixelsPtr, int canvasWidth, int canvasHeight);
 };
 
 void blitScaled(const SDL_Surface* const src, SDL_Surface* dst)
@@ -40,13 +41,15 @@ void blitScaled(const SDL_Surface* const src, SDL_Surface* dst)
             const int sx = ((float)dx / (float)dw) * sw;
             const int sy = ((float)dy / (float)dh) * sh;
 
-            ((U16*)(dst->pixels))[(dy*dw)+dx] = ((U16*)(src->pixels))[(sy*sw)+sx];;
+            ((U32*)(dst->pixels))[(dy*dw)+dx] = ((U32*)(src->pixels))[(sy*sw)+sx];;
         }
 }
 
 // leave this here so render.asm can use it if needed
 volatile unsigned int timer;
 volatile unsigned int frame;
+const int bitsPerPixel = 32;
+const int bytesPerPixel = bitsPerPixel / 8;
 
 int main ( int argc, char** argv )
 {
@@ -64,14 +67,14 @@ int main ( int argc, char** argv )
     atexit(SDL_Quit);
 
     // create a new window
-    SDL_Surface* screen = SDL_SetVideoMode(xres, yres, 16,
-                                           SDL_HWSURFACE
+    SDL_Surface* screen = SDL_SetVideoMode(xres, yres, bitsPerPixel,
+                                           SDL_SWSURFACE
                                            // | SDL_FULLSCREEN
                                            | SDL_DOUBLEBUF
 	);
 
     const SDL_PixelFormat& fmt = *(screen->format);
-    SDL_Surface* canvas = SDL_CreateRGBSurface(SDL_HWSURFACE, cxres, cyres, 16,
+    SDL_Surface* canvas = SDL_CreateRGBSurface(SDL_SWSURFACE, cxres, cyres, bitsPerPixel,
 					       fmt.Rmask, fmt.Gmask, fmt.Bmask, fmt.Amask);
 
     if ( !screen )
@@ -98,24 +101,22 @@ int main ( int argc, char** argv )
 
 		// check for keypresses
             case SDL_KEYDOWN:
-            {
-                // exit if ESCAPE is pressed
+		// exit if ESCAPE is pressed
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                     done = true;
                 break;
-            }
             }
         }
 
         // DRAWING STARTS HERE
         // clear screen
-        SDL_FillRect(screen, 0, SDL_MapRGB(screen->format, 0, 0, 0));
+        //// SDL_FillRect(screen, 0, SDL_MapRGB(screen->format, 0, 0, 0));
 
         timer = SDL_GetTicks();
 	
 	{
 	    // call NASM-compiled fun stuffs
-	    asmRenderTo(canvas->pixels, canvas->w, canvas->h, canvas->format->BytesPerPixel);
+	    asmRenderTo(canvas->pixels, canvas->w, canvas->h);
 
 	    // scale virtual canvas to window's actual surface
 	    blitScaled(canvas, screen);
