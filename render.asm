@@ -4,7 +4,8 @@ extern frame
 global asmRenderTo
 
 section .rodata align=16
-tmatidentity:  dd 1.0, 0.0, 0.0, 1.0
+tmatidentity:  dd -0.448, -0.894
+	       dd  0.894, -0.448
 	
 section .data
 ;; memo: important that image in GIMP should have an Alpha channel before exporting,
@@ -32,8 +33,8 @@ tma:  resd 1
 tmb:  resd 1
 tmc:  resd 1
 tmd:  resd 1
-tx0:   resd 1
-ty0:   resd 1
+tx0:  resd 1
+ty0:  resd 1
 
 xres: resd 1
 yres: resd 1
@@ -54,13 +55,13 @@ asmRenderTo:
 	mov eax,[clearColor]
 	call FillCanvas
 
+	mov rsi,meow
+	call MatrixBlitSprite
+
 	mov rsi,meow		; ptr to 64x64x32bit cat graphic
 	mov rax,16
 	mov rbx,8
 	call DrawSprite
-
-	mov rsi,meow
-	call MatrixBlitSprite
 	ret
 
 ;; ==========================
@@ -159,14 +160,19 @@ _endDrawSprite:
 ;;     Copy pixel at SrcImage[(yi*64)+xi] to [RDI+((y*xres)+x)]
 
 MatrixBlitSprite:
+	xor rax,rax
+	xor rbx,rbx
+	xor rcx,rcx
+	xor rdx,rdx
+	
 	mov r10,0		; y = 0
 _loopY:
 	mov r11,0		; x = 0
-	mov eax,[yres]
-	mov ebx,2
-	xor edx,edx
-	div ebx
-	add eax,r11d		; pz = y + horizon
+	; mov eax,[yres]
+	; mov ebx,2
+	; xor edx,edx
+	; div ebx
+	; add eax,r11d		; pz = y + horizon
 _loopX:
 	; Goal:  xi = ( (tca * (x - tx0)) + (tcb * (y - ty0)) + tx0) / pz
 ;; calculate x - tx0
