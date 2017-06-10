@@ -24,10 +24,8 @@ workvec1:   dd 0,0,0,0
 workvec2:   dd 0,0,0,0
 workvec3:   dd 0,0,0,0
 workvec4:   dd 0,0,0,0
-testvec4:   dd 123.0,-123.00,69.00,420.0
 
-
-section .bss align=16
+section .bss
 ;; affine matrix
 tma:  resd 1
 tmb:  resd 1
@@ -36,6 +34,7 @@ tmd:  resd 1
 tx0:  resd 1
 ty0:  resd 1
 
+align 16
 xres: resd 1
 yres: resd 1
 	
@@ -44,7 +43,23 @@ asmRenderTo:
 ;; rdi is pointer to PIXELS
 ;; rsi is PIXELS WIDTH
 ;; rdx is PIXELS HEIGHT
-
+	pxor xmm0,xmm0
+	pxor xmm1,xmm1
+	pxor xmm2,xmm2
+	pxor xmm3,xmm3
+	pxor xmm4,xmm4
+	pxor xmm5,xmm5
+	pxor xmm6,xmm6
+	pxor xmm7,xmm7
+	pxor xmm8,xmm8
+	pxor xmm9,xmm9
+	pxor xmm10,xmm10
+	pxor xmm11,xmm11
+	pxor xmm12,xmm12
+	pxor xmm13,xmm13
+	pxor xmm14,xmm14
+	pxor xmm15,xmm15
+	
 	mov r8d,esi		; r8 = width / columns / x-res
 	mov [xres],esi
 	mov r9d,edx		; r9 = height / rows / y-res
@@ -249,10 +264,12 @@ _loopX:
 	mov rbx,r13		; rbx = yi
 	imul rbx,64		; rbx = yi * 64 pixels
 	imul rbx,4		; rbx = yi * 64 pixels * 4 bytes
-	mov rax,r13		; rax = xi
+	mov rax,r12		; rax = xi
 	imul rax,4		; rax = xi * 4 bytes
 	add rbx,rax		; rbx = (yi * 64 pixels * 4 bytes) + (xi * 4 bytes)
 	mov r14d,[rsi+rbx]	; r14d = pixel at image[xi, yi]
+
+
 
 ;; plop source image pixel onto screen
 	mov rbx,r10		; rbx = scrY
