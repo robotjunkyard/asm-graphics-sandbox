@@ -25,7 +25,6 @@ workvec2:   dd 0,0,0,0
 workvec3:   dd 0,0,0,0
 workvec4:   dd 0,0,0,0
 
-
 section .bss align=16
 ;; affine matrix
 tma:  resd 1
@@ -42,8 +41,6 @@ asmRenderTo:
 ;; rdi is pointer to PIXELS
 ;; rsi is PIXELS WIDTH
 ;; rdx is PIXELS HEIGHT
-
-
 	;; not zeroing these caused Heisenbuggy problems
 
 	pxor xmm0,xmm0
