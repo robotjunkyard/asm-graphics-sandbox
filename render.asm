@@ -19,6 +19,9 @@ meow:  incbin "cat.img"
 bytesPerPixel: equ 4
 clearColor: db 127,64,0,0	; Blue, Green, Red, Alpha
 align 16
+workvec1:   dd 0,0,0,0
+workvec2:   dd 0,0,0,0
+workvec3:   dd 0,0,0,0
 workvec4:   dd 0,0,0,0
 testvec4:   dd 123.0,-123.00,69.00,420.0
 
@@ -64,21 +67,25 @@ asmRenderTo:
 ;; InitAffineMatrix, initialize affine matrix to identity-ish
 ;; No parameters
 InitAffineMatrix:
+	push rbp
+	mov rbp,rsp
+	
 	;; set 2x2 part of the affine matrix to be [1.0, 0.0],[0.0, 1.0]
 	movaps xmm0,[tmatidentity]
 	movaps [tma],xmm0
 
 	;; set x0 and y0 to xres/2.0 and yres/2.0, respectively
-	mov [rbp+4],dword __float32__(2.0)
+	mov [rbp-4],dword __float32__(2.0)
 	mov eax,[xres]
 	cvtsi2ss xmm0,eax 	; int -> float
-	divss xmm0,[rbp+4]
+	divss xmm0,[rbp-4]
 	movss [tx0],xmm0
 	mov eax,[yres]
 	cvtsi2ss xmm0,eax 	; int -> float
-	divss xmm0,[rbp+4]
+	divss xmm0,[rbp-4]
 	movss [ty0],xmm0
-	
+
+	pop rbp
 	ret
 
 	
@@ -165,44 +172,99 @@ _loopX:
 ;; calculate x - tx0
 	cvtsi2ss xmm0,r11d 	; int -> float, xmm0[0] = x
 	movss xmm1,[tx0]	; xmm1[0] = tx0
+	movss xmm5,xmm1		; xmm5 also = tx0 for later
 	subss xmm0,xmm1		; xmm0[0] -= tx0
 
 ;; calculate y - ty0
 	cvtsi2ss xmm1,r10d 	; int -> float, xmm1[0] = y
 	movss xmm2,[ty0]	; xmm2[0] = ty0
+	movss xmm6,xmm2		; xmm6 also = ty0 for later
 	subss xmm1,xmm2		; xmm1[0] -= ty0
 
-;; prepare for liftoff... but  ?? Can this equivalent thing be done without RAM accesses somehow ??
-	movss [workvec4+0],xmm0
-	movss [workvec4+4],xmm1
-	movss [workvec4+8],xmm0
-	movss [workvec4+12],xmm1
+;; xmm0[0] is now = x - tx0
+;; xmm1[0] is now = y - ty0
+;; now want to set xmm1 to:  [ x-tx0, y-ty0, x-tx0, y-ty0 ]
+;; (could this equivalent thing be done without RAM accesses somehow ??)
+	movss [workvec1+0],xmm0
+	movss [workvec1+4],xmm1
+	movss [workvec1+8],xmm0
+	movss [workvec1+12],xmm1
+	movaps xmm1,[workvec1]
 
-;; set xmm1 := [ x-tx0, y-ty0, x-tx0, y-ty0 ]
-	movaps xmm1,[workvec4]
 ;; set xmm2 := [ tma,   tmb,   tmc,   tmd ]
 	movaps xmm2,[tma]
 ;; calc xmm1 := [ a*(x-x0), b*(y-y0), c*(x-x0), d*(y-y0) ]
 	mulps xmm1,xmm2
 	
 ;; now want to calculate xi,yi as:
-;; xi = xmm1[0] + xmm1[1] + tx0
-;; yi = xmm1[2] + xmm1[3] + ty0
+;;   xi = xmm1[0] + xmm1[1] + tx0
+;;   yi = xmm1[2] + xmm1[3] + ty0
 ;; probably best to strive for this:
-;; xmm2 := [ xmm1[0] , xmm1[1], tx0, 0.0 ]
-;; xmm3 := [ xmm1[2] , xmm1[3], ty0, 0.0 ]
-;; And then use HADDPS (probably?) on each
-	movaps xmm1,[testvec4] 	; temp
-	movlhps xmm2,xmm1
-	movhlps xmm3,xmm1
+;;   xmm2 := [ xmm1[0] , xmm1[1], tx0, 0.0 ]
+;;   xmm3 := [ xmm1[2] , xmm1[3], ty0, 0.0 ]
+;; which is:
+;;   xmm2 := [ xmm1[0] , xmm1[1], xmm5[0], 0.0 ]
+;;   xmm3 := [ xmm1[2] , xmm1[3], xmm6[0], 0.0 ]
+
+	;; copy xmm1 to xmm2
+	movaps xmm2,xmm1
+	movlhps xmm2,xmm5       ; xmm2[2,3] = xmm5[0,1]
+	movhlps xmm3,xmm1    	; xmm3[0,1] = xmm1[2,3]
+	movlhps xmm3,xmm6       ; xmm3[2,3] = xmm6[0,1]
+
+;; And then use HADDPS on each using dummy zero'd-out xmm5 as second operand
+	pxor xmm5,xmm5
+	haddps xmm2,xmm5
+	haddps xmm2,xmm5
+	haddps xmm3,xmm5
+	haddps xmm3,xmm5
 	
-;;;	pshufd xmm1,xmm2,1010b 	;  maybe this does what I think it does?
-;;;	addps 
+;; xmm2 now equals the post-calculated value of xi
+;; xmm3 now equals the post-calculated value of yi
 	
-	;; -
+;; now we want to convert them to integers and modulo each by 64
+	cvtss2si r12,xmm2	; r12 = xi
+	cvtss2si r13,xmm3	; r13 = xi
+
+;; modulo 'em
+	xor rdx,rdx
+	mov rax,r12
+	mov rbx,64
+	idiv rbx
+	mov r12,rdx		; xi now = xi % 64
+
+	xor rdx,rdx
+	mov rax,r13
+	mov rbx,64
+	idiv rbx
+	mov r13,rdx		; yi now = yi % 64
+
+;; read pixel from source image
+	mov rbx,r13		; rbx = yi
+	imul rbx,64		; rbx = yi * 64 pixels
+	imul rbx,4		; rbx = yi * 64 pixels * 4 bytes
+	mov rax,r13		; rax = xi
+	imul rax,4		; rax = xi * 4 bytes
+	add rbx,rax		; rbx = (yi * 64 pixels * 4 bytes) + (xi * 4 bytes)
+	mov r14d,[rsi+rbx]	; r14d = pixel at image[xi, yi]
+
+;; plop source image pixel onto screen
+	mov rbx,r10		; rbx = scrY
+	mov edx,[xres]		
+	imul rbx,rdx		; rbx = scrY * xres
+	imul rbx,4		; rbx = scrY * xres * 4 bytes
+	mov rax,r11		; rax = scrX
+	imul rax,4		; rax = scrX * 4 bytes
+	add rbx,rax
+	mov eax,r14d		; eax = pixel from above
+	mov [rdi+rbx],eax
+	
 	inc r11
 	cmp r11,r8		; x vs x-res
 	jl _loopX
 	inc r10
 	cmp r10,r9		; y vs y-res
 	jl _loopY
+
+	ret
+	
