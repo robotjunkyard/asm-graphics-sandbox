@@ -4,8 +4,8 @@ extern frame
 global asmRenderTo
 
 section .rodata align=16
-tmatidentity:  dd -0.448, -0.894
-	       dd  0.894, -0.448
+tmatidentity:  dd 1.0, 0.0
+	       dd 0.0, 1.0
 	
 section .data
 ;; memo: important that image in GIMP should have an Alpha channel before exporting,
@@ -24,7 +24,6 @@ workvec1:   dd 0,0,0,0
 workvec2:   dd 0,0,0,0
 workvec3:   dd 0,0,0,0
 workvec4:   dd 0,0,0,0
-testvec4:   dd 123.0,-123.00,69.00,420.0
 
 
 section .bss align=16
@@ -35,7 +34,6 @@ tmc:  resd 1
 tmd:  resd 1
 tx0:  resd 1
 ty0:  resd 1
-
 xres: resd 1
 yres: resd 1
 	
@@ -45,6 +43,26 @@ asmRenderTo:
 ;; rsi is PIXELS WIDTH
 ;; rdx is PIXELS HEIGHT
 
+
+	;; not zeroing these caused Heisenbuggy problems
+
+	pxor xmm0,xmm0
+	pxor xmm1,xmm1
+	pxor xmm2,xmm2
+	pxor xmm3,xmm3
+	pxor xmm4,xmm4
+	pxor xmm5,xmm5
+	pxor xmm6,xmm6
+	pxor xmm7,xmm7
+	pxor xmm8,xmm8
+	pxor xmm9,xmm9
+	pxor xmm10,xmm10
+	pxor xmm11,xmm11
+	pxor xmm12,xmm12
+	pxor xmm13,xmm13
+	pxor xmm14,xmm14
+	pxor xmm15,xmm15
+	
 	mov r8d,esi		; r8 = width / columns / x-res
 	mov [xres],esi
 	mov r9d,edx		; r9 = height / rows / y-res
@@ -160,14 +178,9 @@ _endDrawSprite:
 ;;     Copy pixel at SrcImage[(yi*64)+xi] to [RDI+((y*xres)+x)]
 
 MatrixBlitSprite:
-	xor rax,rax
-	xor rbx,rbx
-	xor rcx,rcx
-	xor rdx,rdx
-	
-	mov r10,0		; y = 0
+	mov r10,0		; canvas pixel y = 0
 _loopY:
-	mov r11,0		; x = 0
+	mov r11,0		; canvas pixel x = 0
 	; mov eax,[yres]
 	; mov ebx,2
 	; xor edx,edx
@@ -175,6 +188,7 @@ _loopY:
 	; add eax,r11d		; pz = y + horizon
 _loopX:
 	; Goal:  xi = ( (tca * (x - tx0)) + (tcb * (y - ty0)) + tx0) / pz
+	; TODO: (still have not yet implemented the '/ pz' part, will do another day)
 ;; calculate x - tx0
 	cvtsi2ss xmm0,r11d 	; int -> float, xmm0[0] = x
 	movss xmm1,[tx0]	; xmm1[0] = tx0
@@ -219,6 +233,9 @@ _loopX:
 	movlhps xmm3,xmm6       ; xmm3[2,3] = xmm6[0,1]
 
 ;; And then use HADDPS on each using dummy zero'd-out xmm5 as second operand
+;; Doing HADDPS twice to each register XMM2 and XMM3, results in each of them
+;; containing a scalar at [0] which is the sum of all parts that were originally
+;; there.
 	pxor xmm5,xmm5
 	haddps xmm2,xmm5
 	haddps xmm2,xmm5
@@ -249,10 +266,12 @@ _loopX:
 	mov rbx,r13		; rbx = yi
 	imul rbx,64		; rbx = yi * 64 pixels
 	imul rbx,4		; rbx = yi * 64 pixels * 4 bytes
-	mov rax,r13		; rax = xi
+	mov rax,r12		; rax = xi
 	imul rax,4		; rax = xi * 4 bytes
 	add rbx,rax		; rbx = (yi * 64 pixels * 4 bytes) + (xi * 4 bytes)
 	mov r14d,[rsi+rbx]	; r14d = pixel at image[xi, yi]
+
+
 
 ;; plop source image pixel onto screen
 	mov rbx,r10		; rbx = scrY
