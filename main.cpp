@@ -139,6 +139,7 @@ int main ( int argc, char** argv )
         }
 
       frame++;
+      printf("%d\n", frame);
     } // end main loop
 
   printf("Bye.\n");

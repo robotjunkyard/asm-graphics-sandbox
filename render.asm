@@ -178,14 +178,15 @@ _loopX:
 ;; calculate x - tx0
 	cvtsi2ss xmm0,r11d 	; int -> float, xmm0[0] = x
 
-	mov eax,dword [frame]
-	mov dword [tx0],eax
+	;; TODO: weird that if I were to set [tx0] to [frame],
+	;; (which is incremented every frame in main.cpp),
+	;; it seems to make no difference here: nothing scrolls
 	
 	movss xmm1,[tx0]	; xmm1[0] = tx0
 	movss xmm5,xmm1		; xmm5 also = tx0 for later
 	subss xmm0,xmm1		; xmm0[0] -= tx0
 
-;; calculate y - ty0
+	;; calculate y - ty0
 	cvtsi2ss xmm1,r10d 	; int -> float, xmm1[0] = y
 	movss xmm2,[ty0]	; xmm2[0] = ty0
 	movss xmm6,xmm2		; xmm6 also = ty0 for later
@@ -240,29 +241,21 @@ _loopX:
 	cvtss2si r12,xmm2	; r12 = xi
 	cvtss2si r13,xmm3	; r13 = xi
 
-;; modulo 'em
-	xor rdx,rdx
+	;; modulo 'em
 	mov rax,r12
-	mov rbx,64
-	idiv rbx
-	mov r12,rdx		; xi now = xi % 64
-
-	xor rdx,rdx
+	and rax,(64-1)
+	mov r12,rax		; xi now = xi % 64
 	mov rax,r13
-	mov rbx,64
-	idiv rbx
-	mov r13,rdx		; yi now = yi % 64
+	and rax,(64-1)
+	mov r13,rax 		; yi now = yi % 64
 
-;; read pixel from source image
+	;; read pixel from source image
 	mov rbx,r13		; rbx = yi
-	imul rbx,64		; rbx = yi * 64 pixels
-	imul rbx,4		; rbx = yi * 64 pixels * 4 bytes
+	shl rbx,8               ; rbx *= 64 (pixels) * 4 (bytes)
 	mov rax,r12		; rax = xi
-	imul rax,4		; rax = xi * 4 bytes
+	shl rax,2		; rax *= 4 (bytes)
 	add rbx,rax		; rbx = (yi * 64 pixels * 4 bytes) + (xi * 4 bytes)
-	mov r14d,[rsi+rbx]	; r14d = pixel at image[xi, yi]
-
-
+	mov r14d,dword[rsi+rbx]	; r14d = pixel at image[xi, yi]
 
 ;; plop source image pixel onto screen
 	mov rbx,r10		; rbx = scrY
