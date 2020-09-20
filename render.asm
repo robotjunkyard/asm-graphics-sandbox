@@ -40,28 +40,11 @@ cyres: dd 240			; canvas yres
 	
 section .text
 asmRenderTo:
-	;; rdi is pointer to PIXELS
-	;; rsi is PIXELS WIDTH
-	;; rdx is PIXELS HEIGHT
-	;; not zeroing these caused Heisenbuggy problems
-
-	pxor xmm0,xmm0
-	pxor xmm1,xmm1
-	pxor xmm2,xmm2
-	pxor xmm3,xmm3
-	pxor xmm4,xmm4
-	pxor xmm5,xmm5
-	pxor xmm6,xmm6
-	pxor xmm7,xmm7
-	pxor xmm8,xmm8
-	pxor xmm9,xmm9
-	pxor xmm10,xmm10
-	pxor xmm11,xmm11
-	pxor xmm12,xmm12
-	pxor xmm13,xmm13
-	pxor xmm14,xmm14
-	pxor xmm15,xmm15
-	
+;;; This function is called from C/C++.
+;;; Because of 64-bit Linux ABI:
+	;; rdi is pointer to canvas pixel buffer
+	;; rsi is canvas WIDTH
+	;; rdx is canvas HEIGHT
 	mov r8d,esi		; r8 = width / columns / x-res
 	mov [cxres],esi
 	mov r9d,edx		; r9 = height / rows / y-res
@@ -99,16 +82,14 @@ InitAffineMatrix:
 ;; ==========================
 ;; FillCanvas routine
 ;; eax = 32-bit color to fill the entire canvas with
-FillCanvas:			
-	xor rcx,rcx 	; i = 0
-	mov rdx,r8
-	imul rdx,r9		; rdx = total pixels (rows * columns)
-_fillLoop:
-	mov [rdi+rcx*bytesPerPixel], eax
-	inc rcx			; i++
-	cmp rcx,rdx		; if i < totalPixels,
-	jl  _fillLoop		;    then keep looping
-	ret			; else return
+FillCanvas:
+	push rdi
+	mov ecx,dword[cxres]
+	imul ecx,dword[cyres]
+	cld
+	rep stosd
+	pop rdi
+	ret
 	
 ;; ==========================
 ;; DrawSprite routine
@@ -166,9 +147,9 @@ _endDrawSprite:
 ;;     Copy pixel at SrcImage[(yi*64)+xi] to [RDI+((y*cxres)+x)]
 
 MatrixBlitSprite:
-	mov r10,0		; canvas pixel y = 0
+	xor r10,r10		; canvas pixel y = 0
 _loopY:
-	mov r11,0		; canvas pixel x = 0
+	xor r11,r11		; canvas pixel x = 0
 	; TODO: to add horizon-setting code, put
 	; stuff here later that increments eax
 	; by whatever amount
