@@ -261,11 +261,11 @@ _loopX:
 	mov rbx,r10		; rbx = scrY
 	mov edx,[cxres]		
 	imul rbx,rdx		; rbx = scrY * cxres
-	imul rbx,4		; rbx = scrY * cxres * 4 bytes
+	shl rbx,2		; rbx *= 4 (bytes)
 	mov rax,r11		; rax = scrX
-	imul rax,4		; rax = scrX * 4 bytes
+	shl rax,2		; rax *= 4 (bytes)
 	add rbx,rax
-	mov eax,r14d		; eax = pixel from above
+	mov rax,r14		; eax = pixel from above
 	mov [rdi+rbx],eax
 	
 	inc r11
