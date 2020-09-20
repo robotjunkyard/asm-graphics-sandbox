@@ -1,11 +1,17 @@
+; squash "relocation R_X86_64_32S against `.bss', use -fPIE" error
+DEFAULT REL
+
 extern timer
 extern frame
 ;; extern bytesPerPixel
 global asmRenderTo
-
+global cxres
+global cyres
+	
 section .rodata align=16
-tmatidentity:  dd 1.0, 0.0
-	       dd 0.0, 1.0
+tmatidentity:
+	dd 1.0, 0.0
+	dd 0.0, 1.0
 	
 section .data
 ;; memo: important that image in GIMP should have an Alpha channel before exporting,
@@ -19,28 +25,24 @@ align 16
 meow:  incbin "cat.img"
 bytesPerPixel: equ 4
 clearColor: db 127,64,0,0	; Blue, Green, Red, Alpha
-align 16
-workvec1:   dd 0,0,0,0
-workvec2:   dd 0,0,0,0
-workvec3:   dd 0,0,0,0
-workvec4:   dd 0,0,0,0
 
-section .bss align=16
+;; section .bss align=16
 ;; affine matrix
-tma:  resd 1
-tmb:  resd 1
-tmc:  resd 1
-tmd:  resd 1
-tx0:  resd 1
-ty0:  resd 1
-xres: resd 1
-yres: resd 1
+align 16
+tma:  dd 1.0
+tmb:  dd 0.0
+tmc:  dd 1.0
+tmd:  dd 0.0
+tx0:  dd 0
+ty0:  dd 0
+cxres: dd 256  			; canvas xres
+cyres: dd 240			; canvas yres
 	
 section .text
 asmRenderTo:
-;; rdi is pointer to PIXELS
-;; rsi is PIXELS WIDTH
-;; rdx is PIXELS HEIGHT
+	;; rdi is pointer to PIXELS
+	;; rsi is PIXELS WIDTH
+	;; rdx is PIXELS HEIGHT
 	;; not zeroing these caused Heisenbuggy problems
 
 	pxor xmm0,xmm0
@@ -61,9 +63,9 @@ asmRenderTo:
 	pxor xmm15,xmm15
 	
 	mov r8d,esi		; r8 = width / columns / x-res
-	mov [xres],esi
+	mov [cxres],esi
 	mov r9d,edx		; r9 = height / rows / y-res
-	mov [yres],edx
+	mov [cyres],edx
 
 	call InitAffineMatrix
 
@@ -73,7 +75,7 @@ asmRenderTo:
 	mov rsi,meow
 	call MatrixBlitSprite
 
-	mov rsi,meow		; ptr to 64x64x32bit cat graphic
+	mov rsi,meow	; ptr to 64x64x32bit cat graphic
 	mov rax,16
 	mov rbx,8
 	call DrawSprite
@@ -90,17 +92,6 @@ InitAffineMatrix:
 	movaps xmm0,[tmatidentity]
 	movaps [tma],xmm0
 
-	;; set x0 and y0 to xres/2.0 and yres/2.0, respectively
-	mov [rbp-4],dword __float32__(2.0)
-	mov eax,[xres]
-	cvtsi2ss xmm0,eax 	; int -> float
-	divss xmm0,[rbp-4]
-	movss [tx0],xmm0
-	mov eax,[yres]
-	cvtsi2ss xmm0,eax 	; int -> float
-	divss xmm0,[rbp-4]
-	movss [ty0],xmm0
-
 	pop rbp
 	ret
 
@@ -109,7 +100,7 @@ InitAffineMatrix:
 ;; FillCanvas routine
 ;; eax = 32-bit color to fill the entire canvas with
 FillCanvas:			
-	xor rcx,rcx  		; i = 0
+	xor rcx,rcx 	; i = 0
 	mov rdx,r8
 	imul rdx,r9		; rdx = total pixels (rows * columns)
 _fillLoop:
@@ -164,30 +155,32 @@ _endDrawSprite:
 ;; eax = horizon
 
 ;; Pseudocode, because this function's gonna be a doozy:
-;; for y = 0..yres
-;;   for x = 0..xres
+;; for y = 0..cyres
+;;   for x = 0..cxres
 ;;     pz = y + horizon
 ;;     xi = ( (tca * (x - tx0)) + (tcb * (y - ty0)) + tx0) / pz
 ;;     yi = ( (tcc * (x - tx0)) + (tcd * (y - ty0)) + ty0) / pz
 ;;     xi = mod(xi, 64)
 ;;     yi = mod(yi, 64)
 ;;
-;;     Copy pixel at SrcImage[(yi*64)+xi] to [RDI+((y*xres)+x)]
+;;     Copy pixel at SrcImage[(yi*64)+xi] to [RDI+((y*cxres)+x)]
 
 MatrixBlitSprite:
 	mov r10,0		; canvas pixel y = 0
 _loopY:
 	mov r11,0		; canvas pixel x = 0
-	; mov eax,[yres]
-	; mov ebx,2
-	; xor edx,edx
-	; div ebx
-	; add eax,r11d		; pz = y + horizon
+	; TODO: to add horizon-setting code, put
+	; stuff here later that increments eax
+	; by whatever amount
 _loopX:
 	; Goal:  xi = ( (tca * (x - tx0)) + (tcb * (y - ty0)) + tx0) / pz
 	; TODO: (still have not yet implemented the '/ pz' part, will do another day)
 ;; calculate x - tx0
 	cvtsi2ss xmm0,r11d 	; int -> float, xmm0[0] = x
+
+	mov eax,dword [frame]
+	mov dword [tx0],eax
+	
 	movss xmm1,[tx0]	; xmm1[0] = tx0
 	movss xmm5,xmm1		; xmm5 also = tx0 for later
 	subss xmm0,xmm1		; xmm0[0] -= tx0
@@ -201,13 +194,14 @@ _loopX:
 ;; xmm0[0] is now = x - tx0
 ;; xmm1[0] is now = y - ty0
 ;; now want to set xmm1 to:  [ x-tx0, y-ty0, x-tx0, y-ty0 ]
-;; (could this equivalent thing be done without RAM accesses somehow ??)
-	movss [workvec1+0],xmm0
-	movss [workvec1+4],xmm1
-	movss [workvec1+8],xmm0
-	movss [workvec1+12],xmm1
-	movaps xmm1,[workvec1]
-
+	; (Using XMM7 as "scratch" register)
+	shufps xmm7,xmm0,0
+	shufps xmm7,xmm1,1
+	shufps xmm7,xmm0,2
+	shufps xmm7,xmm1,3
+	movaps xmm1,xmm7
+	; (XMM7 may be used again)
+	
 ;; set xmm2 := [ tma,   tmb,   tmc,   tmd ]
 	movaps xmm2,[tma]
 ;; calc xmm1 := [ a*(x-x0), b*(y-y0), c*(x-x0), d*(y-y0) ]
@@ -272,9 +266,9 @@ _loopX:
 
 ;; plop source image pixel onto screen
 	mov rbx,r10		; rbx = scrY
-	mov edx,[xres]		
-	imul rbx,rdx		; rbx = scrY * xres
-	imul rbx,4		; rbx = scrY * xres * 4 bytes
+	mov edx,[cxres]		
+	imul rbx,rdx		; rbx = scrY * cxres
+	imul rbx,4		; rbx = scrY * cxres * 4 bytes
 	mov rax,r11		; rax = scrX
 	imul rax,4		; rax = scrX * 4 bytes
 	add rbx,rax
